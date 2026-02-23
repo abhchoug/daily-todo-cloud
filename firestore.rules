@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuth() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // ==================== USER COLLECTION ====================
+    
+    // User profiles - only owner can read/write
+    match /users/{userId} {
+      allow read: if isAuth() && isOwner(userId);
+      allow write: if isAuth() && isOwner(userId);
+      allow create: if isAuth() && isOwner(userId);
+      allow delete: if isAuth() && isOwner(userId);
+      
+      // ==================== TASKS SUBCOLLECTION ====================
+      
+      // User's tasks - only owner can access
+      match /tasks/{taskId} {
+        allow read: if isAuth() && isOwner(userId);
+        allow write: if isAuth() && isOwner(userId);
+        allow create: if isAuth() && isOwner(userId) && request.resource.data.text.size() > 0;
+        allow delete: if isAuth() && isOwner(userId);
+        allow update: if isAuth() && isOwner(userId);
+      }
+    }
+    
+    // ==================== METADATA COLLECTION ====================
+    
+    // Public metadata (read-only from client)
+    match /metadata/{document=**} {
+      allow read: if true;
+      allow write: if false; // Only Cloud Functions can write
+    }
+  }
+}
