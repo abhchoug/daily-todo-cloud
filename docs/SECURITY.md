@@ -35,18 +35,19 @@ Firestore (enforce rules)
 
 ### 2. Firestore Security Rules
 
-Rules enforce **user-level data isolation**:
+Rules enforce **authenticated access**, with user profiles still private:
 
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // User can only read/write their own documents
+    // User profiles remain private
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;
-      
+
+      // Tasks are shared across authenticated users
       match /tasks/{taskId} {
-        allow read, write: if request.auth.uid == userId;
+        allow read, write: if request.auth != null;
       }
     }
   }
@@ -55,11 +56,9 @@ service cloud.firestore {
 
 **What these rules prevent:**
 
-❌ User A reading User B's tasks
 ❌ Unauthenticated access to tasks
 ❌ Modifying another user's profile
-❌ Creating tasks for other users
-❌ Deleting tasks without owning them
+❌ Reading another user's profile
 
 ### 3. Cloud Functions Security
 

@@ -23,13 +23,13 @@ service cloud.firestore {
       
       // ==================== TASKS SUBCOLLECTION ====================
       
-      // User's tasks - only owner can access
+      // Tasks are shared across authenticated users
       match /tasks/{taskId} {
-        allow read: if isAuth() && isOwner(userId);
-        allow write: if isAuth() && isOwner(userId);
-        allow create: if isAuth() && isOwner(userId) && request.resource.data.text.size() > 0;
-        allow delete: if isAuth() && isOwner(userId);
-        allow update: if isAuth() && isOwner(userId);
+        allow read: if isAuth();
+        allow write: if isAuth();
+        allow create: if isAuth() && request.resource.data.text.size() > 0;
+        allow delete: if isAuth();
+        allow update: if isAuth();
       }
     }
     
