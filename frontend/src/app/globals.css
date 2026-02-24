@@ -710,6 +710,10 @@ body.theme-notion .month-nav li.active {
   line-height: 1.5;
   resize: none;
   overflow: hidden;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  white-space: pre-wrap;
   transition: all 0.2s ease;
   background: var(--task-bg);
   color: var(--text-primary);
