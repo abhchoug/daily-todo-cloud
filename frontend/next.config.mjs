@@ -4,7 +4,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  basePath: '',
+  basePath: '/daily-todo-cloud',
   trailingSlash: true,
 };
 
