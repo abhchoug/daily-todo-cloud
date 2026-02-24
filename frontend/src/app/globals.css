@@ -258,7 +258,7 @@ body.theme-cyberpunk.month-december { background: linear-gradient(180deg, #0d001
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 1600px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 20px;
   gap: 20px;
@@ -544,7 +544,7 @@ body.theme-notion .month-nav li.active {
 /* ===== Calendar Grid ===== */
 .calendar {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 80px 80px;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 0.6fr 0.6fr;
   gap: 6px;
   flex: 1;
   padding: 20px;
@@ -575,10 +575,44 @@ body.theme-notion .month-nav li.active {
   border-radius: var(--day-radius);
   padding: 10px;
   transition: all 0.2s ease;
-  min-height: 130px;
+  min-height: 140px;
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+/* Scale day cells on large screens */
+@media (min-width: 1600px) {
+  .day {
+    min-height: 170px;
+    padding: 14px;
+  }
+
+  .day h3 {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .task textarea {
+    font-size: 14px;
+  }
+
+  .calendar {
+    gap: 8px;
+    padding: 24px;
+  }
+}
+
+@media (min-width: 2000px) {
+  .day {
+    min-height: 200px;
+    padding: 16px;
+  }
+
+  .calendar {
+    gap: 10px;
+    padding: 28px;
+  }
 }
 
 .day.today {
