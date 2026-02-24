@@ -40,19 +40,28 @@ const monthNames = [
   "December",
 ];
 
-const themeClasses = [
-  "theme-january",
-  "theme-february",
-  "theme-march",
-  "theme-april",
-  "theme-may",
-  "theme-june",
-  "theme-july",
-  "theme-august",
-  "theme-september",
-  "theme-october",
-  "theme-november",
-  "theme-december",
+const monthThemeClasses = [
+  "month-january",
+  "month-february",
+  "month-march",
+  "month-april",
+  "month-may",
+  "month-june",
+  "month-july",
+  "month-august",
+  "month-september",
+  "month-october",
+  "month-november",
+  "month-december",
+];
+
+const DESIGN_THEMES = [
+  { id: "glassmorphism", name: "Glassmorphism Dark", icon: "🔮", description: "Modern frosted glass with neon accents" },
+  { id: "notion", name: "Notion Minimal", icon: "📋", description: "Clean, distraction-free productivity" },
+  { id: "cyberpunk", name: "Neon Cyberpunk", icon: "⚡", description: "Futuristic neon glow aesthetic" },
+  { id: "pastel", name: "Soft Pastel", icon: "🌸", description: "Warm, calming gradient aesthetic" },
+  { id: "material", name: "Material You", icon: "🎨", description: "Google's modern Material Design 3" },
+  { id: "sonoma", name: "macOS Sonoma", icon: "🍎", description: "Apple's sleek dark mode calendar" },
 ];
 
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -94,7 +103,10 @@ export default function Home() {
   const [notification, setNotification] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [designTheme, setDesignTheme] = useState("sonoma");
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const notificationTimer = useRef(null);
+  const monthNavRef = useRef(null);
 
   const daysInMonth = useMemo(
     () => new Date(selectedYear, selectedMonth + 1, 0).getDate(),
@@ -106,7 +118,17 @@ export default function Home() {
     return dayIndex === 0 ? 6 : dayIndex - 1;
   }, [selectedYear, selectedMonth]);
 
-  const calendarTheme = themeClasses[selectedMonth] || "";
+  const monthTheme = monthThemeClasses[selectedMonth] || "";
+
+  function changeDesignTheme(themeId) {
+    setDesignTheme(themeId);
+    try {
+      localStorage.setItem("designTheme", themeId);
+    } catch (_) {
+      /* noop */
+    }
+    setShowThemePicker(false);
+  }
 
   function showNotification(message, type = "info") {
     setNotification({ message, type });
@@ -261,8 +283,19 @@ export default function Home() {
   }
 
   useEffect(() => {
-    document.body.className = calendarTheme;
-  }, [calendarTheme]);
+    document.body.className = `theme-${designTheme} ${monthTheme}`;
+  }, [designTheme, monthTheme]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("designTheme");
+      if (saved && DESIGN_THEMES.some((t) => t.id === saved)) {
+        setDesignTheme(saved);
+      }
+    } catch (_) {
+      /* noop */
+    }
+  }, []);
 
   useEffect(() => {
     ensureMonthPlaceholders();
@@ -416,55 +449,95 @@ export default function Home() {
   return (
     <>
       <div className="container">
-        <div className="sidebar">
-          <div className="sidebar-header">
-            <div className="sidebar-icon">✨📅✨</div>
-            <h1>Daily Tasks</h1>
-            <p>Plan your days beautifully</p>
-          </div>
-          <div className="year-selector">
-            <label htmlFor="year">Select Year</label>
-            <select
-              id="year"
-              value={selectedYear}
-              onChange={(event) => setSelectedYear(Number(event.target.value))}
-            >
-              {Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, index) => {
-                const yearValue = START_YEAR + index;
-                return (
-                  <option key={yearValue} value={yearValue}>
-                    {yearValue}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-          <ul>
-            {monthNames.map((month, index) => (
-              <li
-                key={month}
-                data-month={index}
-                className={index === selectedMonth ? "active" : ""}
-                onClick={() => setSelectedMonth(index)}
-              >
-                {month}
-              </li>
-            ))}
-          </ul>
-
-          {user && (
-            <div className="user-panel">
-              <div className="user-name">
-                {user.displayName || user.email}
+        {/* Top Navigation Header */}
+        <div className="app-header">
+          <div className="header-left">
+            <div className="logo-area">
+              <div className="logo-icon">✨📅</div>
+              <div className="logo-text">
+                <h1>Daily Tasks</h1>
+                <p>Plan beautifully</p>
               </div>
-              <button type="button" className="logout-btn" onClick={handleLogout}>
-                Logout
-              </button>
             </div>
-          )}
+            <div className="year-selector">
+              <select
+                id="year"
+                value={selectedYear}
+                onChange={(event) => setSelectedYear(Number(event.target.value))}
+              >
+                {Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, index) => {
+                  const yearValue = START_YEAR + index;
+                  return (
+                    <option key={yearValue} value={yearValue}>
+                      {yearValue}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          <div className="month-nav" ref={monthNavRef}>
+            <ul>
+              {monthNames.map((month, index) => (
+                <li
+                  key={month}
+                  data-month={index}
+                  className={index === selectedMonth ? "active" : ""}
+                  onClick={() => setSelectedMonth(index)}
+                >
+                  {month}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="header-right">
+            <button
+              type="button"
+              className="theme-toggle-btn"
+              onClick={() => setShowThemePicker(!showThemePicker)}
+              title="Change theme"
+            >
+              🎨
+            </button>
+            {user && (
+              <div className="user-area">
+                <span className="user-avatar">
+                  {(user.displayName || user.email || "U")[0].toUpperCase()}
+                </span>
+                <button type="button" className="logout-btn" onClick={handleLogout}>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className={`calendar ${calendarTheme}`}>{calendarCells}</div>
+        {/* Theme Picker Dropdown */}
+        {showThemePicker && (
+          <div className="theme-picker-overlay" onClick={() => setShowThemePicker(false)}>
+            <div className="theme-picker" onClick={(e) => e.stopPropagation()}>
+              <h3>🎨 Choose Theme</h3>
+              <div className="theme-grid">
+                {DESIGN_THEMES.map((theme) => (
+                  <button
+                    key={theme.id}
+                    className={`theme-option ${designTheme === theme.id ? "active" : ""}`}
+                    onClick={() => changeDesignTheme(theme.id)}
+                  >
+                    <span className="theme-option-icon">{theme.icon}</span>
+                    <span className="theme-option-name">{theme.name}</span>
+                    <span className="theme-option-desc">{theme.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Calendar Grid */}
+        <div className={`calendar ${monthTheme}`}>{calendarCells}</div>
       </div>
 
       {!user && (
