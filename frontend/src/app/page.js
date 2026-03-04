@@ -282,6 +282,14 @@ export default function Home() {
     textarea.style.height = `${textarea.scrollHeight}px`;
   }
 
+  // Resize all textareas whenever tasks load or change (e.g. after Firestore fetch)
+  useEffect(() => {
+    document.querySelectorAll(".task textarea").forEach((textarea) => {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    });
+  }, [tasksByDate]);
+
   useEffect(() => {
     document.body.className = `theme-${designTheme} ${monthTheme}`;
   }, [designTheme, monthTheme]);
