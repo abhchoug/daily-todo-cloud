@@ -64,7 +64,7 @@ const DESIGN_THEMES = [
   { id: "sonoma", name: "macOS Sonoma", icon: "🍎", description: "Apple's sleek dark mode calendar" },
 ];
 
-const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
 const START_YEAR = 2024;
 const END_YEAR = 2030;
@@ -395,6 +395,10 @@ export default function Home() {
     }
   }
 
+  // For a weekday-only grid: if the month starts on Sat (5) or Sun (6), treat
+  // the first weekday column offset as 0 (the first rendered day is Mon).
+  const weekdayFirstIndex = firstDayIndex < 5 ? firstDayIndex : 0;
+
   const calendarCells = [];
   dayNames.forEach((name) => {
     calendarCells.push(
@@ -404,7 +408,7 @@ export default function Home() {
     );
   });
 
-  for (let i = 0; i < firstDayIndex; i += 1) {
+  for (let i = 0; i < weekdayFirstIndex; i += 1) {
     calendarCells.push(<div key={`empty-${i}`} className="empty-day" />);
   }
 
@@ -412,7 +416,11 @@ export default function Home() {
     const dateKey = getDateKey(selectedYear, selectedMonth, day);
     const tasks = tasksByDate[dateKey] || [createPlaceholder(dateKey)];
     const dayOfWeek = (firstDayIndex + day - 1) % 7;
-    const isInactive = dayOfWeek === 5 || dayOfWeek === 6;
+    const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+
+    // Skip Saturday and Sunday entirely — no cell rendered
+    if (isWeekend) continue; // eslint-disable-line no-continue
+
     const isToday =
       day === today.getDate() &&
       selectedMonth === today.getMonth() &&
@@ -421,7 +429,7 @@ export default function Home() {
     calendarCells.push(
       <div
         key={`day-${dateKey}`}
-        className={`day ${isToday ? "today" : ""} ${isInactive ? "inactive" : ""}`}
+        className={`day ${isToday ? "today" : ""}`}
       >
         <h3>{formatDayHeader(selectedYear, selectedMonth, day)}</h3>
         <div className="task-container">
