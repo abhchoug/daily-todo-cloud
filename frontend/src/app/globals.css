@@ -36,7 +36,7 @@ html {
   --header-bg: rgba(44, 44, 46, 0.8);
   --month-pill-bg: rgba(255, 255, 255, 0.05);
   --month-pill-active: #0a84ff;
-  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+  --font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --checked-text: rgba(255, 255, 255, 0.5);
   --checked-bg: rgba(255, 255, 255, 0.02);
 }
@@ -89,7 +89,7 @@ body.theme-notion {
   --month-pill-active: #37352f;
   --checked-text: #9b9a97;
   --checked-bg: transparent;
-  --font-family: 'DM Sans', 'Inter', -apple-system, sans-serif;
+  --font-family: var(--font-dm-sans), var(--font-inter), -apple-system, sans-serif;
   --surface-hover: #f0f0f0;
   --surface-light: #fafafa;
 }
@@ -118,7 +118,7 @@ body.theme-cyberpunk {
   --day-radius: 8px;
   --month-pill-bg: rgba(255, 0, 255, 0.1);
   --month-pill-active: #ff00ff;
-  --font-family: 'Space Grotesk', 'Inter', monospace;
+  --font-family: var(--font-space-grotesk), var(--font-inter), monospace;
 }
 
 /* ===== Theme: Soft Pastel ===== */
@@ -147,7 +147,7 @@ body.theme-pastel {
   --month-pill-active: #ff9a9e;
   --checked-text: #8b7355;
   --checked-bg: rgba(255, 255, 255, 0.3);
-  --font-family: 'DM Sans', 'Inter', -apple-system, sans-serif;
+  --font-family: var(--font-dm-sans), var(--font-inter), -apple-system, sans-serif;
   --surface-hover: rgba(255, 255, 255, 0.95);
   --surface-light: rgba(255, 255, 255, 0.6);
 }
@@ -178,7 +178,7 @@ body.theme-material {
   --month-pill-active: #6750a4;
   --checked-text: #79747e;
   --checked-bg: #f3edf7;
-  --font-family: 'Inter', 'Roboto', -apple-system, sans-serif;
+  --font-family: var(--font-inter), -apple-system, sans-serif;
   --surface-hover: #ece6f0;
   --surface-light: #f7f2fa;
 }
@@ -361,7 +361,7 @@ body.theme-cyberpunk.month-december { background: linear-gradient(180deg, #0d001
   display: none;
 }
 
-.month-nav ul {
+.month-nav-list {
   display: flex;
   list-style: none;
   gap: 8px;
@@ -369,7 +369,7 @@ body.theme-cyberpunk.month-december { background: linear-gradient(180deg, #0d001
   padding: 0;
 }
 
-.month-nav li {
+.month-pill {
   padding: 10px 18px;
   cursor: pointer;
   border-radius: 20px;
@@ -380,15 +380,22 @@ body.theme-cyberpunk.month-december { background: linear-gradient(180deg, #0d001
   white-space: nowrap;
   background: var(--month-pill-bg);
   border: 1px solid transparent;
+  font-family: inherit;
+  position: relative;
 }
 
-.month-nav li:hover {
+.month-pill:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
   transform: translateY(-1px);
 }
 
-.month-nav li.active {
+.month-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.month-pill.active {
   background: var(--month-pill-active);
   color: white;
   font-weight: 600;
@@ -396,8 +403,55 @@ body.theme-cyberpunk.month-december { background: linear-gradient(180deg, #0d001
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Task count badge on month pills */
+.task-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+  line-height: 1;
+}
+
+.month-pill.active .task-count-badge {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Today button */
+.today-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.today-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.today-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Notion theme: active pill text should be white */
-body.theme-notion .month-nav li.active {
+body.theme-notion .month-pill.active {
   color: #ffffff;
 }
 
@@ -634,6 +688,15 @@ body.theme-notion .month-nav li.active {
   filter: brightness(1.1);
 }
 
+/* Past days get dimmed */
+.day.past {
+  opacity: 0.55;
+}
+
+.day.past:hover {
+  opacity: 0.8;
+}
+
 .day.inactive {
   background: rgba(128, 128, 128, 0.05);
   opacity: 0.5;
@@ -684,6 +747,7 @@ body.theme-notion .month-nav li.active {
   margin-bottom: 6px;
   gap: 8px;
   animation: slideIn 0.3s ease;
+  position: relative;
 }
 
 .task input[type="checkbox"] {
@@ -736,6 +800,79 @@ body.theme-notion .month-nav li.active {
   color: var(--checked-text);
 }
 
+/* Delete button for tasks */
+.task-delete-btn {
+  position: absolute;
+  top: 2px;
+  right: -2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 59, 48, 0.8);
+  color: white;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform: scale(0.8);
+  z-index: 2;
+}
+
+.task:hover .task-delete-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.task-delete-btn:hover {
+  background: rgba(255, 59, 48, 1);
+  transform: scale(1.1);
+}
+
+.task-delete-btn:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Save indicator spinner */
+.save-indicator {
+  display: flex;
+  align-items: center;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.save-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+.task-saving textarea {
+  opacity: 0.7;
+}
+
+/* Empty state for days with no tasks */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.day:hover .empty-state {
+  opacity: 0.8;
+}
+
 /* ===== Cyberpunk special effects ===== */
 body.theme-cyberpunk .day:hover {
   box-shadow: 0 0 20px rgba(0, 255, 255, 0.2), inset 0 0 20px rgba(0, 255, 255, 0.05);
@@ -753,7 +890,7 @@ body.theme-cyberpunk .logo-text h1 {
   text-shadow: none;
 }
 
-body.theme-cyberpunk .month-nav li.active {
+body.theme-cyberpunk .month-pill.active {
   box-shadow: 0 0 20px rgba(255, 0, 255, 0.4);
 }
 
@@ -830,6 +967,44 @@ body.theme-glassmorphism .day:hover {
   margin-bottom: 16px;
 }
 
+/* Auth tab switcher */
+.auth-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  background: var(--surface-light);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.auth-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.auth-tab.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.auth-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .auth-card input {
   width: 100%;
   padding: 10px 12px;
@@ -839,6 +1014,7 @@ body.theme-glassmorphism .day:hover {
   color: var(--text-primary);
   margin-bottom: 10px;
   font-family: inherit;
+  font-size: 14px;
 }
 
 .auth-card input:focus {
@@ -855,44 +1031,89 @@ body.theme-glassmorphism .day:hover {
   border-radius: 10px;
   padding: 10px 12px;
   font-weight: 600;
+  font-size: 14px;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, filter 0.2s ease;
   font-family: inherit;
 }
 
-.primary-btn:hover {
+.primary-btn:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: brightness(1.1);
 }
 
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.primary-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .auth-divider {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   font-size: 11px;
   color: var(--text-muted);
   margin: 16px 0;
 }
 
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.provider-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .provider-btn {
-  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--surface-light);
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  margin-bottom: 8px;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
   font-family: inherit;
 }
 
-.provider-btn:hover {
+.provider-btn:hover:not(:disabled) {
   background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+
+.provider-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.provider-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .provider-btn.github {
   background: rgba(0, 0, 0, 0.4);
   color: #ffffff;
+}
+
+.provider-icon {
+  flex-shrink: 0;
 }
 
 /* ===== Notification ===== */
@@ -903,39 +1124,111 @@ body.theme-glassmorphism .day:hover {
   padding: 12px 16px;
   border-radius: 12px;
   color: white;
-  background: rgba(10, 132, 255, 0.8);
+  background: rgba(10, 132, 255, 0.9);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   animation: slideIn 0.3s ease-out;
   z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 340px;
 }
 
 .notification.success {
-  background: rgba(48, 209, 88, 0.85);
+  background: rgba(48, 209, 88, 0.9);
 }
 
 .notification.error {
-  background: rgba(255, 55, 95, 0.85);
+  background: rgba(255, 55, 95, 0.9);
 }
 
-/* ===== Loading ===== */
-.loading-indicator {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+.notification-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2500;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+/* ===== Loading Bar (non-blocking) ===== */
+.loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 2500;
+  overflow: hidden;
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.loading-bar-fill {
+  height: 100%;
+  width: 30%;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  animation: loadingSlide 1.2s ease-in-out infinite;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+@keyframes loadingSlide {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(200%); }
+  100% { transform: translateX(400%); }
+}
+
+/* ===== Error Boundary ===== */
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--bg-primary);
+}
+
+.error-card {
+  max-width: 480px;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--calendar-radius);
+  padding: 32px;
+  text-align: center;
+}
+
+.error-card h2 {
+  font-size: 20px;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.error-card p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.error-details {
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: rgba(255, 59, 48, 0.9);
+  margin-bottom: 16px;
+  text-align: left;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ===== Animations ===== */
@@ -954,6 +1247,26 @@ body.theme-glassmorphism .day:hover {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ===== Demo Mode Banner ===== */
+.demo-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 149, 0, 0.9);
+  color: #ffffff;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 3000;
+  box-shadow: 0 4px 16px rgba(255, 149, 0, 0.3);
+  text-align: center;
+  max-width: 90vw;
+  backdrop-filter: blur(8px);
+  animation: slideIn 0.3s ease-out;
 }
 
 /* ===== Responsive ===== */

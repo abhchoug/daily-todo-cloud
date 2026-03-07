@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  GoogleAuthProvider,
-  GithubAuthProvider,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -23,91 +21,60 @@ import {
   where,
 } from "firebase/firestore";
 
-import { auth, db } from "@/lib/firebase";
+import { auth, db, isDemoMode } from "@/lib/firebase";
+import { monthNames, monthThemeClasses, dayNames, DESIGN_THEMES } from "@/lib/constants";
+import { pad, getDateKey, createPlaceholder, withPlaceholder } from "@/lib/utils";
 
-const monthNames = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+import ErrorBoundary from "@/components/ErrorBoundary";
+import AppHeader from "@/components/AppHeader";
+import ThemePicker from "@/components/ThemePicker";
+import DayCell from "@/components/DayCell";
+import AuthOverlay from "@/components/AuthOverlay";
+import Notification from "@/components/Notification";
 
-const monthThemeClasses = [
-  "month-january",
-  "month-february",
-  "month-march",
-  "month-april",
-  "month-may",
-  "month-june",
-  "month-july",
-  "month-august",
-  "month-september",
-  "month-october",
-  "month-november",
-  "month-december",
-];
-
-const DESIGN_THEMES = [
-  { id: "glassmorphism", name: "Glassmorphism Dark", icon: "🔮", description: "Modern frosted glass with neon accents" },
-  { id: "notion", name: "Notion Minimal", icon: "📋", description: "Clean, distraction-free productivity" },
-  { id: "cyberpunk", name: "Neon Cyberpunk", icon: "⚡", description: "Futuristic neon glow aesthetic" },
-  { id: "pastel", name: "Soft Pastel", icon: "🌸", description: "Warm, calming gradient aesthetic" },
-  { id: "material", name: "Material You", icon: "🎨", description: "Google's modern Material Design 3" },
-  { id: "sonoma", name: "macOS Sonoma", icon: "🍎", description: "Apple's sleek dark mode calendar" },
-];
-
-const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-
-const START_YEAR = 2024;
-const END_YEAR = 2030;
-
-function pad(number) {
-  return String(number).padStart(2, "0");
-}
-
-function getDateKey(year, month, day) {
-  return `${year}-${pad(month + 1)}-${pad(day)}`;
-}
-
-function formatDayHeader(year, month, day) {
-  const shortMonth = new Intl.DateTimeFormat("en", { month: "short" }).format(
-    new Date(year, month)
-  );
-  return `${day}-${shortMonth}-${String(year).slice(-2)}`;
-}
-
-function createPlaceholder(dateKey) {
-  return { id: `placeholder-${dateKey}`, text: "", checked: false, placeholder: true };
-}
-
-function withPlaceholder(tasks, dateKey) {
-  const hasPlaceholder = tasks.some((task) => task.placeholder);
-  return hasPlaceholder ? tasks : [...tasks, createPlaceholder(dateKey)];
-}
+// Demo mode: fake user object and ID counter for in-memory tasks
+const DEMO_USER = isDemoMode ? { uid: "demo", displayName: "Demo User", email: "demo@local" } : null;
+let demoIdCounter = 0;
 
 export default function Home() {
-  const today = useMemo(() => new Date(), []);
-  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(today.getMonth());
+  const [today, setToday] = useState(() => new Date());
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
   const [tasksByDate, setTasksByDate] = useState({});
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(isDemoMode ? DEMO_USER : null);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [designTheme, setDesignTheme] = useState("sonoma");
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [savingTasks, setSavingTasks] = useState(new Set());
+  const [taskCountByMonth, setTaskCountByMonth] = useState({});
   const notificationTimer = useRef(null);
-  const monthNavRef = useRef(null);
+  const touchStartX = useRef(null);
 
+  /* ── Keep "today" fresh across midnight / tab switch ── */
+  useEffect(() => {
+    function checkDate() {
+      const now = new Date();
+      if (
+        now.getDate() !== today.getDate() ||
+        now.getMonth() !== today.getMonth() ||
+        now.getFullYear() !== today.getFullYear()
+      ) {
+        setToday(now);
+      }
+    }
+    function handleVisibility() {
+      if (document.visibilityState === "visible") checkDate();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    const interval = setInterval(checkDate, 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(interval);
+    };
+  }, [today]);
+
+  /* ── Derived values ── */
   const daysInMonth = useMemo(
     () => new Date(selectedYear, selectedMonth + 1, 0).getDate(),
     [selectedYear, selectedMonth]
@@ -120,6 +87,7 @@ export default function Home() {
 
   const monthTheme = monthThemeClasses[selectedMonth] || "";
 
+  /* ── Theme helpers ── */
   function changeDesignTheme(themeId) {
     setDesignTheme(themeId);
     try {
@@ -130,18 +98,24 @@ export default function Home() {
     setShowThemePicker(false);
   }
 
+  /* ── Notification helper ── */
   function showNotification(message, type = "info") {
     setNotification({ message, type });
-
-    if (notificationTimer.current) {
-      clearTimeout(notificationTimer.current);
-    }
-
-    notificationTimer.current = setTimeout(() => {
-      setNotification(null);
-    }, 3000);
+    if (notificationTimer.current) clearTimeout(notificationTimer.current);
+    notificationTimer.current = setTimeout(() => setNotification(null), 3000);
   }
 
+  /* ── Saving indicator helpers ── */
+  function markSaving(taskId, isSaving) {
+    setSavingTasks((prev) => {
+      const next = new Set(prev);
+      if (isSaving) next.add(taskId);
+      else next.delete(taskId);
+      return next;
+    });
+  }
+
+  /* ── Task state helpers ── */
   function ensureMonthPlaceholders() {
     const placeholders = {};
     for (let day = 1; day <= daysInMonth; day += 1) {
@@ -151,8 +125,17 @@ export default function Home() {
     setTasksByDate(placeholders);
   }
 
+  function updateTaskState(dateKey, updater) {
+    setTasksByDate((prev) => {
+      const current = prev[dateKey] || [createPlaceholder(dateKey)];
+      const updated = updater(current);
+      return { ...prev, [dateKey]: withPlaceholder(updated, dateKey) };
+    });
+  }
+
+  /* ── Firestore: load tasks for selected month ── */
   async function loadMonthTasks(currentUser) {
-    if (!currentUser) return;
+    if (!currentUser || isDemoMode) return;
 
     setLoading(true);
     try {
@@ -169,14 +152,18 @@ export default function Home() {
       );
       const snapshot = await getDocs(tasksQuery);
       const tasksForMonth = {};
+      let taskCount = 0;
 
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
         const dateKey = data.date;
-        if (!tasksForMonth[dateKey]) {
-          tasksForMonth[dateKey] = [];
-        }
-        tasksForMonth[dateKey].push({ id: docSnap.id, text: data.text || "", checked: !!data.checked });
+        if (!tasksForMonth[dateKey]) tasksForMonth[dateKey] = [];
+        tasksForMonth[dateKey].push({
+          id: docSnap.id,
+          text: data.text || "",
+          checked: !!data.checked,
+        });
+        taskCount += 1;
       });
 
       setTasksByDate((prev) => {
@@ -186,6 +173,9 @@ export default function Home() {
         });
         return next;
       });
+
+      // Cache task count for this month (used in month pill badges)
+      setTaskCountByMonth((prev) => ({ ...prev, [selectedMonth]: taskCount }));
     } catch (error) {
       console.error("Error loading tasks:", error);
       showNotification("Failed to load tasks.", "error");
@@ -194,20 +184,31 @@ export default function Home() {
     }
   }
 
-  function updateTaskState(dateKey, updater) {
-    setTasksByDate((prev) => {
-      const current = prev[dateKey] || [createPlaceholder(dateKey)];
-      const updated = updater(current);
-      return { ...prev, [dateKey]: withPlaceholder(updated, dateKey) };
-    });
-  }
-
+  /* ── Task CRUD handlers ── */
   async function handleTaskBlur(dateKey, task) {
     if (!user) return;
 
     const text = task.text.trim();
+
+    // New task from placeholder
     if (task.placeholder) {
       if (!text) return;
+      markSaving(task.id, true);
+
+      if (isDemoMode) {
+        // Demo: in-memory only
+        const newId = `demo-${++demoIdCounter}`;
+        updateTaskState(dateKey, (current) => {
+          const withoutPlaceholder = current.filter((item) => !item.placeholder);
+          return [...withoutPlaceholder, { id: newId, text, checked: false }];
+        });
+        setTaskCountByMonth((prev) => ({
+          ...prev,
+          [selectedMonth]: (prev[selectedMonth] || 0) + 1,
+        }));
+        markSaving(task.id, false);
+        return;
+      }
 
       try {
         const tasksRef = collection(db, "users", user.uid, "tasks");
@@ -218,29 +219,35 @@ export default function Home() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-
         updateTaskState(dateKey, (current) => {
           const withoutPlaceholder = current.filter((item) => !item.placeholder);
           return [...withoutPlaceholder, { id: docRef.id, text, checked: false }];
         });
+        setTaskCountByMonth((prev) => ({
+          ...prev,
+          [selectedMonth]: (prev[selectedMonth] || 0) + 1,
+        }));
       } catch (error) {
         console.error("Error adding task:", error);
         showNotification("Failed to add task", "error");
+      } finally {
+        markSaving(task.id, false);
       }
       return;
     }
 
+    // Empty text → delete
     if (!text) {
-      try {
-        await deleteDoc(doc(db, "users", user.uid, "tasks", task.id));
-        updateTaskState(dateKey, (current) => current.filter((item) => item.id !== task.id));
-      } catch (error) {
-        console.error("Error deleting task:", error);
-        showNotification("Failed to delete task", "error");
-      }
+      await handleTaskDelete(dateKey, task);
       return;
     }
 
+    // Update existing task text
+    markSaving(task.id, true);
+    if (isDemoMode) {
+      markSaving(task.id, false);
+      return;
+    }
     try {
       await updateDoc(doc(db, "users", user.uid, "tasks", task.id), {
         text,
@@ -249,16 +256,51 @@ export default function Home() {
     } catch (error) {
       console.error("Error updating task:", error);
       showNotification("Failed to update task", "error");
+    } finally {
+      markSaving(task.id, false);
+    }
+  }
+
+  async function handleTaskDelete(dateKey, task) {
+    if (!user || task.placeholder) return;
+    markSaving(task.id, true);
+
+    if (isDemoMode) {
+      updateTaskState(dateKey, (current) =>
+        current.filter((item) => item.id !== task.id)
+      );
+      setTaskCountByMonth((prev) => ({
+        ...prev,
+        [selectedMonth]: Math.max((prev[selectedMonth] || 1) - 1, 0),
+      }));
+      markSaving(task.id, false);
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "tasks", task.id));
+      updateTaskState(dateKey, (current) =>
+        current.filter((item) => item.id !== task.id)
+      );
+      setTaskCountByMonth((prev) => ({
+        ...prev,
+        [selectedMonth]: Math.max((prev[selectedMonth] || 1) - 1, 0),
+      }));
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      showNotification("Failed to delete task", "error");
+    } finally {
+      markSaving(task.id, false);
     }
   }
 
   async function handleTaskCheck(dateKey, task, checked) {
     if (!user || task.placeholder) return;
-
     updateTaskState(dateKey, (current) =>
       current.map((item) => (item.id === task.id ? { ...item, checked } : item))
     );
-
+    if (isDemoMode) return;
+    markSaving(task.id, true);
     try {
       await updateDoc(doc(db, "users", user.uid, "tasks", task.id), {
         checked,
@@ -267,6 +309,8 @@ export default function Home() {
     } catch (error) {
       console.error("Error updating task:", error);
       showNotification("Failed to update task", "error");
+    } finally {
+      markSaving(task.id, false);
     }
   }
 
@@ -276,95 +320,35 @@ export default function Home() {
     );
   }
 
-  function resizeTextarea(event) {
-    const textarea = event.target;
-    textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  }
-
-  // Resize all textareas whenever tasks load or change (e.g. after Firestore fetch)
-  useEffect(() => {
-    document.querySelectorAll(".task textarea").forEach((textarea) => {
-      textarea.style.height = "auto";
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    });
-  }, [tasksByDate]);
-
-  useEffect(() => {
-    document.body.className = `theme-${designTheme} ${monthTheme}`;
-  }, [designTheme, monthTheme]);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("designTheme");
-      if (saved && DESIGN_THEMES.some((t) => t.id === saved)) {
-        setDesignTheme(saved);
-      }
-    } catch (_) {
-      /* noop */
-    }
-  }, []);
-
-  useEffect(() => {
-    ensureMonthPlaceholders();
-    if (user) {
-      loadMonthTasks(user);
-    }
-  }, [user, selectedYear, selectedMonth]);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser || null);
-      if (!nextUser) {
-        setTasksByDate({});
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      if (notificationTimer.current) {
-        clearTimeout(notificationTimer.current);
-      }
-    };
-  }, []);
-
-  async function handleEmailAuth(event) {
-    event.preventDefault();
-
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password) {
+  /* ── Auth handlers ── */
+  async function handleEmailAuth(email, password, authMode) {
+    if (!email || !password) {
       showNotification("Please fill in all fields", "error");
       return;
     }
-
     setLoading(true);
     try {
-      try {
-        await signInWithEmailAndPassword(auth, trimmedEmail, password);
+      if (authMode === "signup") {
+        await createUserWithEmailAndPassword(auth, email, password);
+        showNotification("Account created! Welcome!", "success");
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
         showNotification("Signed in successfully!", "success");
-      } catch (signInError) {
-        if (signInError.code === "auth/user-not-found") {
-          await createUserWithEmailAndPassword(auth, trimmedEmail, password);
-          showNotification("Account created! Welcome!", "success");
-        } else {
-          throw signInError;
-        }
       }
     } catch (error) {
       console.error("Auth error:", error);
-
-      let message = "An error occurred. Please try again.";
-      if (error.code === "auth/invalid-email") {
-        message = "Invalid email address";
-      } else if (error.code === "auth/weak-password") {
-        message = "Password must be at least 6 characters";
-      } else if (error.code === "auth/email-already-in-use") {
-        message = "Email already in use. Please sign in.";
-      } else if (error.code === "auth/wrong-password") {
-        message = "Incorrect password. Try again.";
-      }
-
-      showNotification(message, "error");
+      const messages = {
+        "auth/invalid-email": "Invalid email address",
+        "auth/weak-password": "Password must be at least 6 characters",
+        "auth/email-already-in-use": "Email already in use. Try signing in.",
+        "auth/wrong-password": "Incorrect password. Try again.",
+        "auth/user-not-found": "No account found. Try signing up.",
+        "auth/invalid-credential": "Invalid credentials. Please check and try again.",
+      };
+      showNotification(
+        messages[error.code] || "An error occurred. Please try again.",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
@@ -386,8 +370,6 @@ export default function Home() {
   async function handleLogout() {
     try {
       await signOut(auth);
-      setEmail("");
-      setPassword("");
       showNotification("Logged out successfully", "success");
     } catch (error) {
       console.error("Logout error:", error);
@@ -395,14 +377,83 @@ export default function Home() {
     }
   }
 
-  // For a weekday-only grid: if the month starts on Sat (5) or Sun (6), treat
-  // the first weekday column offset as 0 (the first rendered day is Mon).
+  /* ── Swipe gesture on calendar (mobile) ── */
+  function handleCalendarTouchStart(e) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+
+  function handleCalendarTouchEnd(e) {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    const threshold = 60;
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0) {
+        if (selectedMonth < 11) setSelectedMonth(selectedMonth + 1);
+        else {
+          setSelectedMonth(0);
+          setSelectedYear(selectedYear + 1);
+        }
+      } else {
+        if (selectedMonth > 0) setSelectedMonth(selectedMonth - 1);
+        else {
+          setSelectedMonth(11);
+          setSelectedYear(selectedYear - 1);
+        }
+      }
+    }
+    touchStartX.current = null;
+  }
+
+  /* ── Effects ── */
+  useEffect(() => {
+    document.body.className = `theme-${designTheme} ${monthTheme}`;
+  }, [designTheme, monthTheme]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("designTheme");
+      if (saved && DESIGN_THEMES.some((t) => t.id === saved)) {
+        setDesignTheme(saved);
+      }
+    } catch (_) {
+      /* noop */
+    }
+  }, []);
+
+  useEffect(() => {
+    ensureMonthPlaceholders();
+    if (user) loadMonthTasks(user);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, selectedYear, selectedMonth]);
+
+  useEffect(() => {
+    if (isDemoMode) return;
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser || null);
+      if (!nextUser) {
+        setTasksByDate({});
+        setTaskCountByMonth({});
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (notificationTimer.current) clearTimeout(notificationTimer.current);
+    };
+  }, []);
+
+  /* ── Build calendar grid cells ── */
   const weekdayFirstIndex = firstDayIndex < 5 ? firstDayIndex : 0;
+  const todayDateKey = getDateKey(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
 
   const calendarCells = [];
+
   dayNames.forEach((name) => {
     calendarCells.push(
-      <div key={`day-name-${name}`} className="day-name">
+      <div key={`day-name-${name}`} className="day-name" role="columnheader">
         {name}
       </div>
     );
@@ -418,196 +469,91 @@ export default function Home() {
     const dayOfWeek = (firstDayIndex + day - 1) % 7;
     const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
 
-    // Skip Saturday and Sunday entirely — no cell rendered
-    if (isWeekend) continue; // eslint-disable-line no-continue
+    if (isWeekend) continue;
 
     const isToday =
       day === today.getDate() &&
       selectedMonth === today.getMonth() &&
       selectedYear === today.getFullYear();
 
+    const isPast = dateKey < todayDateKey;
+
     calendarCells.push(
-      <div
+      <DayCell
         key={`day-${dateKey}`}
-        className={`day ${isToday ? "today" : ""}`}
-      >
-        <h3>{formatDayHeader(selectedYear, selectedMonth, day)}</h3>
-        <div className="task-container">
-          {tasks.map((task) => (
-            <div key={task.id} className="task">
-              <input
-                type="checkbox"
-                checked={!!task.checked}
-                disabled={task.placeholder}
-                onChange={(event) => handleTaskCheck(dateKey, task, event.target.checked)}
-              />
-              <textarea
-                value={task.text}
-                placeholder="Add task"
-                rows={1}
-                onChange={(event) => handleTaskTextChange(dateKey, task.id, event.target.value)}
-                onInput={resizeTextarea}
-                onBlur={() => handleTaskBlur(dateKey, task)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+        dateKey={dateKey}
+        day={day}
+        year={selectedYear}
+        month={selectedMonth}
+        isToday={isToday}
+        isPast={isPast}
+        tasks={tasks}
+        onTaskCheck={handleTaskCheck}
+        onTaskTextChange={handleTaskTextChange}
+        onTaskBlur={handleTaskBlur}
+        onTaskDelete={handleTaskDelete}
+        savingTasks={savingTasks}
+      />
     );
   }
 
+  /* ── Render ── */
   return (
-    <>
+    <ErrorBoundary>
       <div className="container">
-        {/* Top Navigation Header */}
-        <div className="app-header">
-          <div className="header-left">
-            <div className="logo-area">
-              <div className="logo-icon">✨📅</div>
-              <div className="logo-text">
-                <h1>Daily Tasks</h1>
-                <p>Plan beautifully</p>
-              </div>
-            </div>
-            <div className="year-selector">
-              <select
-                id="year"
-                value={selectedYear}
-                onChange={(event) => setSelectedYear(Number(event.target.value))}
-              >
-                {Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, index) => {
-                  const yearValue = START_YEAR + index;
-                  return (
-                    <option key={yearValue} value={yearValue}>
-                      {yearValue}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
+        <AppHeader
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          onYearChange={setSelectedYear}
+          onMonthChange={setSelectedMonth}
+          user={user}
+          onLogout={handleLogout}
+          onToggleTheme={() => setShowThemePicker(!showThemePicker)}
+          today={today}
+          taskCountByMonth={taskCountByMonth}
+        />
 
-          <div className="month-nav" ref={monthNavRef}>
-            <ul>
-              {monthNames.map((month, index) => (
-                <li
-                  key={month}
-                  data-month={index}
-                  className={index === selectedMonth ? "active" : ""}
-                  onClick={() => setSelectedMonth(index)}
-                >
-                  {month}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="header-right">
-            <button
-              type="button"
-              className="theme-toggle-btn"
-              onClick={() => setShowThemePicker(!showThemePicker)}
-              title="Change theme"
-            >
-              🎨
-            </button>
-            {user && (
-              <div className="user-area">
-                <span className="user-avatar">
-                  {(user.displayName || user.email || "U")[0].toUpperCase()}
-                </span>
-                <button type="button" className="logout-btn" onClick={handleLogout}>
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Theme Picker Dropdown */}
         {showThemePicker && (
-          <div className="theme-picker-overlay" onClick={() => setShowThemePicker(false)}>
-            <div className="theme-picker" onClick={(e) => e.stopPropagation()}>
-              <h3>🎨 Choose Theme</h3>
-              <div className="theme-grid">
-                {DESIGN_THEMES.map((theme) => (
-                  <button
-                    key={theme.id}
-                    className={`theme-option ${designTheme === theme.id ? "active" : ""}`}
-                    onClick={() => changeDesignTheme(theme.id)}
-                  >
-                    <span className="theme-option-icon">{theme.icon}</span>
-                    <span className="theme-option-name">{theme.name}</span>
-                    <span className="theme-option-desc">{theme.description}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <ThemePicker
+            designTheme={designTheme}
+            onChange={changeDesignTheme}
+            onClose={() => setShowThemePicker(false)}
+          />
         )}
 
-        {/* Calendar Grid */}
-        <div className={`calendar ${monthTheme}`}>{calendarCells}</div>
+        <div
+          className={`calendar ${monthTheme}`}
+          role="grid"
+          aria-label={`Calendar for ${monthNames[selectedMonth]} ${selectedYear}`}
+          onTouchStart={handleCalendarTouchStart}
+          onTouchEnd={handleCalendarTouchEnd}
+        >
+          {calendarCells}
+        </div>
+
+        {loading && (
+          <div className="loading-bar" role="progressbar" aria-label="Loading tasks">
+            <div className="loading-bar-fill" />
+          </div>
+        )}
       </div>
 
-      {!user && (
-        <div className="auth-overlay">
-          <div className="auth-card">
-            <h2>Welcome to Daily Tasks</h2>
-            <p>Sign in to sync your calendar everywhere.</p>
-            <form onSubmit={handleEmailAuth}>
-              <input
-                type="email"
-                placeholder="Email address"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              <button type="submit" className="primary-btn">
-                Sign In / Sign Up
-              </button>
-            </form>
-            <div className="auth-divider">or</div>
-            <button
-              type="button"
-              className="provider-btn"
-              onClick={() => handleProviderSignIn(new GoogleAuthProvider())}
-            >
-              🔵 Continue with Google
-            </button>
-            <button
-              type="button"
-              className="provider-btn github"
-              onClick={() => handleProviderSignIn(new GithubAuthProvider())}
-            >
-              🐙 Continue with GitHub
-            </button>
-          </div>
+      {!user && !isDemoMode && (
+        <AuthOverlay
+          onEmailAuth={handleEmailAuth}
+          onProviderSignIn={handleProviderSignIn}
+          loading={loading}
+        />
+      )}
+
+      {isDemoMode && (
+        <div className="demo-banner" role="status">
+          Demo Mode — tasks are stored in memory only.
+          Set Firebase env vars to enable cloud sync.
         </div>
       )}
 
-      {loading && (
-        <div className="loading-indicator">
-          <div className="spinner"></div>
-        </div>
-      )}
-
-      {notification && (
-        <div className={`notification ${notification.type}`}>{notification.message}</div>
-      )}
-    </>
+      <Notification notification={notification} />
+    </ErrorBoundary>
   );
 }
