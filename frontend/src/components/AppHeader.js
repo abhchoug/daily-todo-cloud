@@ -5,7 +5,7 @@ import { monthNames, START_YEAR, END_YEAR } from "@/lib/constants";
 
 export default function AppHeader({
   selectedYear, selectedMonth, onYearChange, onMonthChange,
-  user, onLogout, onToggleTheme, today, taskCountByMonth,
+  user, onLogout, onToggleTheme, onToggleNotes, today, taskCountByMonth,
 }) {
   const touchStartX = useRef(null);
 
@@ -111,6 +111,15 @@ export default function AppHeader({
       </nav>
 
       <div className="header-right">
+        <button
+          type="button"
+          className="notes-toggle-btn"
+          onClick={onToggleNotes}
+          title="Projects &amp; Notes"
+          aria-label="Toggle projects and notes panel"
+        >
+          📝
+        </button>
         <button
           type="button"
           className="theme-toggle-btn"

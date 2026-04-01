@@ -31,6 +31,7 @@ import ThemePicker from "@/components/ThemePicker";
 import DayCell from "@/components/DayCell";
 import AuthOverlay from "@/components/AuthOverlay";
 import Notification from "@/components/Notification";
+import NotesPanel from "@/components/NotesPanel";
 
 // Demo mode: fake user object and ID counter for in-memory tasks
 const DEMO_USER = isDemoMode ? { uid: "demo", displayName: "Demo User", email: "demo@local" } : null;
@@ -48,6 +49,8 @@ export default function Home() {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [savingTasks, setSavingTasks] = useState(new Set());
   const [taskCountByMonth, setTaskCountByMonth] = useState({});
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [notes, setNotes] = useState([]);
   const notificationTimer = useRef(null);
   const touchStartX = useRef(null);
 
@@ -320,6 +323,92 @@ export default function Home() {
     );
   }
 
+  /* ── Notes CRUD ── */
+  async function loadNotes(currentUser) {
+    if (!currentUser) return;
+    if (isDemoMode) return;
+    try {
+      const notesRef = collection(db, "users", currentUser.uid, "notes");
+      const notesQuery = query(notesRef, orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(notesQuery);
+      const loaded = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        loaded.push({
+          id: docSnap.id,
+          title: data.title || "",
+          content: data.content || "",
+          createdAt: data.createdAt?.toMillis?.() || null,
+          updatedAt: data.updatedAt?.toMillis?.() || null,
+        });
+      });
+      setNotes(loaded);
+    } catch (error) {
+      console.error("Error loading notes:", error);
+      showNotification("Failed to load notes.", "error");
+    }
+  }
+
+  async function handleAddNote(title) {
+    if (!user) return;
+    if (isDemoMode) {
+      const newNote = {
+        id: `demo-note-${++demoIdCounter}`,
+        title,
+        content: "",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setNotes((prev) => [newNote, ...prev]);
+      return;
+    }
+    try {
+      const notesRef = collection(db, "users", user.uid, "notes");
+      const docRef = await addDoc(notesRef, {
+        title,
+        content: "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setNotes((prev) => [
+        { id: docRef.id, title, content: "", createdAt: Date.now(), updatedAt: Date.now() },
+        ...prev,
+      ]);
+    } catch (error) {
+      console.error("Error adding note:", error);
+      showNotification("Failed to add note.", "error");
+    }
+  }
+
+  async function handleUpdateNote(noteId, updates) {
+    if (!user) return;
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? { ...n, ...updates, updatedAt: Date.now() } : n))
+    );
+    if (isDemoMode) return;
+    try {
+      await updateDoc(doc(db, "users", user.uid, "notes", noteId), {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Error updating note:", error);
+      showNotification("Failed to update note.", "error");
+    }
+  }
+
+  async function handleDeleteNote(noteId) {
+    if (!user) return;
+    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    if (isDemoMode) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "notes", noteId));
+    } catch (error) {
+      console.error("Error deleting note:", error);
+      showNotification("Failed to delete note.", "error");
+    }
+  }
+
   /* ── Auth handlers ── */
   async function handleEmailAuth(email, password, authMode) {
     if (!email || !password) {
@@ -422,7 +511,10 @@ export default function Home() {
 
   useEffect(() => {
     ensureMonthPlaceholders();
-    if (user) loadMonthTasks(user);
+    if (user) {
+      loadMonthTasks(user);
+      loadNotes(user);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, selectedYear, selectedMonth]);
 
@@ -433,6 +525,7 @@ export default function Home() {
       if (!nextUser) {
         setTasksByDate({});
         setTaskCountByMonth({});
+        setNotes([]);
       }
     });
     return () => {
@@ -509,6 +602,7 @@ export default function Home() {
           user={user}
           onLogout={handleLogout}
           onToggleTheme={() => setShowThemePicker(!showThemePicker)}
+          onToggleNotes={() => setShowNotesPanel(!showNotesPanel)}
           today={today}
           taskCountByMonth={taskCountByMonth}
         />
@@ -518,6 +612,16 @@ export default function Home() {
             designTheme={designTheme}
             onChange={changeDesignTheme}
             onClose={() => setShowThemePicker(false)}
+          />
+        )}
+
+        {showNotesPanel && (
+          <NotesPanel
+            notes={notes}
+            onAddNote={handleAddNote}
+            onUpdateNote={handleUpdateNote}
+            onDeleteNote={handleDeleteNote}
+            onClose={() => setShowNotesPanel(false)}
           />
         )}
 
